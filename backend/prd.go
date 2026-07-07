@@ -62,18 +62,18 @@ type generatePRDRequest struct {
 }
 
 type prd struct {
-	ID              int64     `json:"id"`
-	UserID          int64     `json:"user_id"`
-	Title           string    `json:"title"`
-	Prompt          string    `json:"prompt"`
-	Frontend        string    `json:"frontend"`
-	Backend         string    `json:"backend"`
-	Database        string    `json:"database"`
-	Deployment      string    `json:"deployment"`
-	Content         string    `json:"content"`
-	PreviousContent *string   `json:"previous_content"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID         int64     `json:"id"`
+	UserID     int64     `json:"user_id"`
+	Title      string    `json:"title"`
+	Prompt     string    `json:"prompt"`
+	Frontend   string    `json:"frontend"`
+	Backend    string    `json:"backend"`
+	Database   string    `json:"database"`
+	Deployment string    `json:"deployment"`
+	Content    string    `json:"content"`
+	CanUndo    bool      `json:"can_undo"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // buildModelPrompt appends the user's chosen tech stack (if any) to their
@@ -128,9 +128,9 @@ func generatePRDHandler(ai anthropic.Client) func(w http.ResponseWriter, r *http
 		err = db.QueryRowContext(r.Context(),
 			`INSERT INTO prds (user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			 RETURNING id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, previous_content, created_at, updated_at`,
+			 RETURNING id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, created_at, updated_at`,
 			userID, req.Title, req.Prompt, req.Frontend, req.Backend, req.Database, req.Deployment, content,
-		).Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.PreviousContent, &p.CreatedAt, &p.UpdatedAt)
+		).Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			log.Println("db insert error:", err)
 			http.Error(w, "failed to save PRD", http.StatusInternalServerError)
@@ -199,10 +199,17 @@ func generateWithClaudeCode(ctx context.Context, systemPrompt, prompt string) (s
 	return content, nil
 }
 
+const prdSelectColumns = `p.id, p.user_id, p.title, p.prompt, p.frontend_stack, p.backend_stack, p.database_stack, p.deployment_stack, p.content,
+		 EXISTS(SELECT 1 FROM prd_revisions r WHERE r.prd_id = p.id), p.created_at, p.updated_at`
+
+func scanPRD(row interface{ Scan(...any) error }, p *prd) error {
+	return row.Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.CanUndo, &p.CreatedAt, &p.UpdatedAt)
+}
+
 func listPRDsHandler(w http.ResponseWriter, r *http.Request, userID int64) {
 	rows, err := db.QueryContext(r.Context(),
-		`SELECT id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, previous_content, created_at, updated_at
-		 FROM prds WHERE user_id = $1 ORDER BY created_at DESC`,
+		`SELECT `+prdSelectColumns+`
+		 FROM prds p WHERE p.user_id = $1 ORDER BY p.created_at DESC`,
 		userID)
 	if err != nil {
 		http.Error(w, "failed to list PRDs", http.StatusInternalServerError)
@@ -213,7 +220,7 @@ func listPRDsHandler(w http.ResponseWriter, r *http.Request, userID int64) {
 	list := []prd{}
 	for rows.Next() {
 		var p prd
-		if err := rows.Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.PreviousContent, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := scanPRD(rows, &p); err != nil {
 			http.Error(w, "failed to read PRDs", http.StatusInternalServerError)
 			return
 		}
@@ -227,10 +234,10 @@ func listPRDsHandler(w http.ResponseWriter, r *http.Request, userID int64) {
 func getPRDHandler(w http.ResponseWriter, r *http.Request, userID int64) {
 	id := r.PathValue("id")
 	var p prd
-	err := db.QueryRowContext(r.Context(),
-		`SELECT id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, previous_content, created_at, updated_at
-		 FROM prds WHERE id = $1 AND user_id = $2`, id, userID,
-	).Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.PreviousContent, &p.CreatedAt, &p.UpdatedAt)
+	err := scanPRD(db.QueryRowContext(r.Context(),
+		`SELECT `+prdSelectColumns+`
+		 FROM prds p WHERE p.id = $1 AND p.user_id = $2`, id, userID,
+	), &p)
 	if err == sql.ErrNoRows {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -293,38 +300,98 @@ func editPRDHandler(ai anthropic.Client) func(w http.ResponseWriter, r *http.Req
 			return
 		}
 
+		tx, err := db.BeginTx(r.Context(), nil)
+		if err != nil {
+			http.Error(w, "failed to save PRD", http.StatusInternalServerError)
+			return
+		}
+		defer tx.Rollback()
+
+		if _, err := tx.ExecContext(r.Context(),
+			`INSERT INTO prd_revisions (prd_id, content) SELECT id, content FROM prds WHERE id = $1 AND user_id = $2`,
+			id, userID,
+		); err != nil {
+			log.Println("db revision insert error:", err)
+			http.Error(w, "failed to save PRD", http.StatusInternalServerError)
+			return
+		}
+
 		var p prd
-		err = db.QueryRowContext(r.Context(),
-			`UPDATE prds SET previous_content = content, content = $1, updated_at = now() WHERE id = $2 AND user_id = $3
-			 RETURNING id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, previous_content, created_at, updated_at`,
+		err = tx.QueryRowContext(r.Context(),
+			`UPDATE prds SET content = $1, updated_at = now() WHERE id = $2 AND user_id = $3
+			 RETURNING id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, created_at, updated_at`,
 			newContent, id, userID,
-		).Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.PreviousContent, &p.CreatedAt, &p.UpdatedAt)
+		).Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			log.Println("db update error:", err)
 			http.Error(w, "failed to save PRD", http.StatusInternalServerError)
 			return
 		}
+		if err := tx.Commit(); err != nil {
+			http.Error(w, "failed to save PRD", http.StatusInternalServerError)
+			return
+		}
+		p.CanUndo = true
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(p)
 	}
 }
 
-// undoPRDHandler restores content from previous_content (one level of undo,
-// set by editPRDHandler before it overwrites content).
+// undoPRDHandler pops the most recent row from prd_revisions and restores it
+// as the PRD's content, giving multi-level undo (each edit in editPRDHandler
+// pushes the pre-edit content there first).
 func undoPRDHandler(w http.ResponseWriter, r *http.Request, userID int64) {
 	id := r.PathValue("id")
-	var p prd
-	err := db.QueryRowContext(r.Context(),
-		`UPDATE prds SET content = previous_content, previous_content = NULL, updated_at = now()
-		 WHERE id = $1 AND user_id = $2 AND previous_content IS NOT NULL
-		 RETURNING id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, previous_content, created_at, updated_at`,
+
+	tx, err := db.BeginTx(r.Context(), nil)
+	if err != nil {
+		http.Error(w, "failed to undo", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	var revisionID int64
+	var revisionContent string
+	err = tx.QueryRowContext(r.Context(),
+		`SELECT r.id, r.content FROM prd_revisions r
+		 JOIN prds p ON p.id = r.prd_id
+		 WHERE r.prd_id = $1 AND p.user_id = $2
+		 ORDER BY r.id DESC LIMIT 1`,
 		id, userID,
-	).Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.PreviousContent, &p.CreatedAt, &p.UpdatedAt)
+	).Scan(&revisionID, &revisionContent)
 	if err == sql.ErrNoRows {
 		http.Error(w, "nothing to undo", http.StatusNotFound)
 		return
 	} else if err != nil {
+		http.Error(w, "failed to undo", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := tx.ExecContext(r.Context(), `DELETE FROM prd_revisions WHERE id = $1`, revisionID); err != nil {
+		http.Error(w, "failed to undo", http.StatusInternalServerError)
+		return
+	}
+
+	var p prd
+	err = tx.QueryRowContext(r.Context(),
+		`UPDATE prds SET content = $1, updated_at = now() WHERE id = $2 AND user_id = $3
+		 RETURNING id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, created_at, updated_at`,
+		revisionContent, id, userID,
+	).Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		http.Error(w, "failed to undo", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.QueryRowContext(r.Context(),
+		`SELECT EXISTS(SELECT 1 FROM prd_revisions WHERE prd_id = $1)`, id,
+	).Scan(&p.CanUndo); err != nil {
+		http.Error(w, "failed to undo", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
 		http.Error(w, "failed to undo", http.StatusInternalServerError)
 		return
 	}

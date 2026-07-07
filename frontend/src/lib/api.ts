@@ -10,7 +10,7 @@ export type Prd = {
   database: string;
   deployment: string;
   content: string;
-  previous_content: string | null;
+  can_undo: boolean;
   created_at: string;
   updated_at: string;
 };

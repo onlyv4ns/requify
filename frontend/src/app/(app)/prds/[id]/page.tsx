@@ -133,7 +133,7 @@ export default function PrdDetailPage() {
             >
               <FileDown size={14} /> Download PDF
             </button>
-            {prd.previous_content && (
+            {prd.can_undo && (
               <button
                 onClick={handleUndo}
                 disabled={undoing}
