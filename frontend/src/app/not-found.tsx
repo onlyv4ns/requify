@@ -26,10 +26,10 @@ export default function NotFound() {
             Go home
           </Link>
           <Link
-            href="/chat"
+            href="/generate"
             className="flex-1 rounded border border-border py-2 text-center text-sm text-foreground/70 hover:bg-accent-dim/40"
           >
-            Go to Chat
+            Go to Generate
           </Link>
         </div>
       </AuthCard>

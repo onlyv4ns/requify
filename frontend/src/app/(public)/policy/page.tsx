@@ -3,27 +3,27 @@ import { PageHeader, SectionLabel } from "@/components/ui";
 const SECTIONS = [
   {
     title: "INFORMATION WE COLLECT",
-    body: "Account details you provide (name, email) and the chats, code, and projects you create. In this demo, everything is stored only in your own browser's local storage — nothing is sent to a server.",
+    body: "Account details you provide (name, email) and the PRDs you generate or edit. This data is stored in our database, scoped to your account.",
   },
   {
     title: "HOW WE USE IT",
-    body: "To run the product: sign you in, show your chat history, and remember your preferences.",
+    body: "To run the product: sign you in, show your PRDs, and send their content to the configured AI provider when you generate, edit, or ask a question.",
   },
   {
     title: "SHARING",
-    body: "We don't sell your data. It's never shared with third parties except a model provider, if you connect one.",
+    body: "We don't sell your data. PRD content is sent to the AI provider configured on the server (Anthropic API or the claude CLI) to generate responses, and to no one else.",
   },
   {
     title: "COOKIES",
-    body: "We use local storage to keep you signed in and remember settings — no tracking cookies.",
+    body: "We use a single session cookie to keep you signed in — no tracking cookies.",
   },
   {
     title: "DATA RETENTION",
-    body: 'Data lives in your browser until you clear it (Settings → Clear all chats) or clear your browser storage.',
+    body: "Your PRDs are kept until you delete them from the PRDs page.",
   },
   {
     title: "YOUR RIGHTS",
-    body: "You can export or delete your data at any time from Settings.",
+    body: "You can delete any PRD at any time from its page.",
   },
 ];
 

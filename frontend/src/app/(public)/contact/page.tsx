@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, MessageCircle } from "lucide-react";
+import { Mail } from "lucide-react";
 import { PageHeader, SectionLabel } from "@/components/ui";
 import { Field } from "@/components/AuthForm";
 
@@ -75,15 +75,7 @@ export default function ContactPage() {
       <div className="mt-4 flex flex-col gap-2">
         <div className="flex items-center gap-3 rounded border border-border p-3 text-sm">
           <Mail size={16} className="text-accent" />
-          support@nexa.app
-        </div>
-        <div className="flex items-center gap-3 rounded border border-border p-3 text-sm">
-          <MessageCircle size={16} className="text-accent" />
-          Community — browse ideas on the{" "}
-          <a href="/explore" className="underline text-accent">
-            Explore
-          </a>{" "}
-          page
+          support@requify.app
         </div>
       </div>
     </div>

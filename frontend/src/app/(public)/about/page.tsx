@@ -1,24 +1,25 @@
 import { PageHeader, SectionLabel } from "@/components/ui";
 
 const STATS = [
-  { value: "128K", label: "context window" },
-  { value: "3", label: "model sizes" },
-  { value: "24/7", label: "uptime target" },
+  { value: "4", label: "core actions" },
+  { value: "2", label: "AI providers" },
+  { value: "1", label: "minute to a first draft" },
 ];
 
 export default function AboutPage() {
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-12">
       <PageHeader
-        title="About Nexa"
-        subtitle="A fast, no-nonsense interface for working with language models."
+        title="About Requify"
+        subtitle="A fast, no-nonsense way to turn a product idea into a PRD."
       />
 
       <SectionLabel>MISSION</SectionLabel>
       <p className="mt-4 text-sm text-foreground/70">
-        Nexa is built for people who'd rather type a command than click
-        through a menu. One workspace for chat, code, and project notes —
-        keyboard-first, no clutter.
+        Writing a Product Requirements Document from scratch is slow.
+        Requify generates a full first draft from a short prompt and a tech
+        stack, then lets you edit it with plain-language instructions, ask
+        questions about it, and export it — keyboard-first, no clutter.
       </p>
 
       <div className="mt-8">

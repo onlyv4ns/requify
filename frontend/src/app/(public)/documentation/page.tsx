@@ -1,24 +1,16 @@
 import { PageHeader, SectionLabel } from "@/components/ui";
 
 const FEATURES = [
-  { name: "Chat", desc: "Ask questions, get code, or explore ideas in a running conversation." },
-  { name: "Code", desc: "Keep files in a workspace, run them, and generate new code from a prompt." },
-  { name: "Explore", desc: "Browse curated prompt ideas across code, data, and writing." },
-  { name: "Projects", desc: "Group related chats and files together under one project." },
+  { name: "Generate", desc: "Describe a product idea and a tech stack, get a full PRD back." },
+  { name: "Edit with AI", desc: "Give a plain-language instruction and the PRD is rewritten in place." },
+  { name: "Undo", desc: "Revert the last AI edit back to the previous version." },
+  { name: "Ask", desc: "Ask questions about a PRD without changing it." },
+  { name: "Export", desc: "Download any PRD as Markdown or PDF." },
 ];
 
-const SHORTCUTS = [
-  { keys: "Ctrl + K", desc: "Toggle sidebar" },
-  { keys: "Ctrl + Enter", desc: "Send message" },
-  { keys: "@", desc: "Mention a file or project" },
-  { keys: "/", desc: "Open the command menu" },
-];
-
-const COMMANDS = [
-  { cmd: "/help", desc: "Show available commands" },
-  { cmd: "/clear", desc: "Clear the current chat" },
-  { cmd: "/model", desc: "Switch the active model" },
-  { cmd: "/export", desc: "Export the chat as markdown" },
+const PROVIDERS = [
+  { name: "api", desc: "Uses the Anthropic API directly. Needs ANTHROPIC_API_KEY set on the server." },
+  { name: "claude_code", desc: "Uses the claude CLI already logged in on the server — no API key needed." },
 ];
 
 export default function DocumentationPage() {
@@ -26,15 +18,14 @@ export default function DocumentationPage() {
     <div className="mx-auto w-full max-w-2xl px-4 py-12">
       <PageHeader
         title="Documentation"
-        subtitle="Everything you need to get around Nexa."
+        subtitle="Everything you need to get around Requify."
       />
 
       <SectionLabel>GETTING STARTED</SectionLabel>
       <p className="mt-4 text-sm text-foreground/70">
-        Sign in, then start typing in the Chat box on the home screen — no
-        setup required. Every feature below works without connecting an API
-        key; wire one up in Settings once you're ready for real model
-        responses.
+        Sign in, then go to Generate — write a short prompt describing the
+        product, optionally pick a frontend/backend/database/deployment
+        stack, and submit. The PRD opens as soon as it's ready.
       </p>
 
       <div className="mt-8">
@@ -50,33 +41,13 @@ export default function DocumentationPage() {
       </div>
 
       <div className="mt-8">
-        <SectionLabel>KEYBOARD SHORTCUTS</SectionLabel>
+        <SectionLabel>AI PROVIDERS</SectionLabel>
       </div>
       <div className="mt-4 flex flex-col gap-2">
-        {SHORTCUTS.map(({ keys, desc }) => (
-          <div
-            key={keys}
-            className="flex items-center justify-between rounded border border-border p-3 text-sm"
-          >
-            <span className="text-foreground/70">{desc}</span>
-            <kbd className="rounded border border-border bg-accent-dim/30 px-2 py-1 text-xs text-accent">
-              {keys}
-            </kbd>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-8">
-        <SectionLabel>COMMANDS</SectionLabel>
-      </div>
-      <div className="mt-4 flex flex-col gap-2">
-        {COMMANDS.map(({ cmd, desc }) => (
-          <div
-            key={cmd}
-            className="flex items-center justify-between rounded border border-border p-3 text-sm"
-          >
-            <span className="text-accent">{cmd}</span>
-            <span className="text-foreground/50">{desc}</span>
+        {PROVIDERS.map(({ name, desc }) => (
+          <div key={name} className="rounded border border-border p-3 text-sm">
+            <div className="text-accent">{name}</div>
+            <div className="mt-1 text-foreground/50">{desc}</div>
           </div>
         ))}
       </div>

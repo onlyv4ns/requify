@@ -50,7 +50,7 @@ export default function PublicLayout({
             </Link>
           ))}
         </nav>
-        <span>&copy; {new Date().getFullYear()} Nexa.</span>{" "}
+        <span>&copy; {new Date().getFullYear()} Requify.</span>{" "}
         <Link href="/terms" className="hover:text-foreground">
           Terms
         </Link>{" "}

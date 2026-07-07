@@ -1,24 +1,24 @@
 import Link from "next/link";
 import {
-  Terminal,
-  Code2,
-  Compass,
-  Folder,
+  Sparkles,
+  FileText,
+  MessageCircle,
+  Undo2,
   ArrowRight,
   CornerDownLeft,
 } from "lucide-react";
 
 const FEATURES = [
-  { icon: Terminal, name: "Chat", desc: "Ask questions, get code, or explore ideas in a running conversation." },
-  { icon: Code2, name: "Code", desc: "Keep files in a workspace, run them, and generate new code from a prompt." },
-  { icon: Compass, name: "Explore", desc: "Browse curated prompt ideas across code, data, and writing." },
-  { icon: Folder, name: "Projects", desc: "Group related chats and files together under one project." },
+  { icon: Sparkles, name: "Generate", desc: "Describe a product idea and a tech stack, get a full PRD back." },
+  { icon: FileText, name: "Edit with AI", desc: "Give a plain-language instruction and the PRD is rewritten in place." },
+  { icon: MessageCircle, name: "Ask", desc: "Ask questions about a PRD without changing a word of it." },
+  { icon: Undo2, name: "Undo", desc: "Made a bad edit? Revert straight back to the previous version." },
 ];
 
 const STEPS = [
   { n: "01", title: "Create an account", desc: "Sign up in seconds — no credit card required." },
-  { n: "02", title: "Ask or write code", desc: "Chat, generate snippets, or browse prompt ideas." },
-  { n: "03", title: "Ship it", desc: "Keep everything organized in projects as you go." },
+  { n: "02", title: "Describe the product", desc: "One prompt plus an optional tech stack is enough." },
+  { n: "03", title: "Refine and export", desc: "Edit with AI, ask questions, then download as Markdown or PDF." },
 ];
 
 export default function LandingPage() {
@@ -26,15 +26,15 @@ export default function LandingPage() {
     <div>
       <section className="mx-auto flex w-full max-w-3xl flex-col items-center px-4 py-24 text-center">
         <span className="rounded border border-border px-3 py-1 text-xs text-foreground/60">
-          &gt;_ AI workspace for chat, code, and projects
+          &gt;_ AI-generated Product Requirements Documents
         </span>
         <h1 className="mt-6 text-3xl font-bold sm:text-4xl">
-          <span className="text-accent">&gt;_</span> Ask anything. Ship faster.
+          <span className="text-accent">&gt;_</span> Describe it. Get a PRD.
         </h1>
         <p className="mt-4 max-w-xl text-foreground/60">
-          Nexa is a keyboard-first workspace for talking to a model, running
-          code, and keeping projects organized — all in one terminal-style
-          interface.
+          Requify turns a short product prompt and a tech stack into a
+          complete PRD — then lets you edit it, ask questions about it, and
+          export it, all in one terminal-style interface.
         </p>
         <div className="mt-8 flex items-center gap-3">
           <Link
@@ -55,11 +55,11 @@ export default function LandingPage() {
           <div className="flex items-center gap-2 text-sm">
             <span className="text-accent">&gt;_</span>
             <span className="text-foreground/60">
-              Write code to demonstrate Dijkstra&apos;s algorithm
+              A task management app for small teams with boards and due dates
             </span>
           </div>
           <div className="mt-2 flex items-center justify-between border-t border-border pt-2 text-xs text-foreground/60">
-            <span>Nexa 1.0 &middot; 128K context</span>
+            <span>Next.js &middot; Go &middot; PostgreSQL</span>
             <span className="rounded bg-accent p-1.5 text-black">
               <CornerDownLeft size={14} />
             </span>
@@ -71,7 +71,7 @@ export default function LandingPage() {
         <div className="mx-auto w-full max-w-4xl">
           <div className="text-center">
             <span className="text-sm text-accent">&gt; FEATURES</span>
-            <h2 className="mt-2 text-2xl font-bold">One workspace, four modes</h2>
+            <h2 className="mt-2 text-2xl font-bold">From idea to PRD</h2>
           </div>
           <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {FEATURES.map(({ icon: Icon, name, desc }) => (

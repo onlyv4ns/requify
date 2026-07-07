@@ -3,11 +3,11 @@ import { PageHeader, SectionLabel } from "@/components/ui";
 const SECTIONS = [
   {
     title: "ACCEPTANCE OF TERMS",
-    body: "By using Nexa you agree to these terms. If you don't agree, don't use the service.",
+    body: "By using Requify you agree to these terms. If you don't agree, don't use the service.",
   },
   {
     title: "USE OF SERVICE",
-    body: "Nexa is provided as a demo product. Don't use it to break the law, harass anyone, or attempt to disrupt the service.",
+    body: "Requify is provided as a demo product. Don't use it to break the law, harass anyone, or attempt to disrupt the service.",
   },
   {
     title: "ACCOUNTS",
@@ -15,7 +15,7 @@ const SECTIONS = [
   },
   {
     title: "CONTENT",
-    body: "You keep ownership of anything you send through Nexa. We don't claim rights to your chats, code, or projects.",
+    body: "You keep ownership of anything you send through Requify. We don't claim rights to your PRDs.",
   },
   {
     title: "TERMINATION",
@@ -23,7 +23,7 @@ const SECTIONS = [
   },
   {
     title: "DISCLAIMER",
-    body: 'Nexa is provided "as is" with no warranty of any kind, including accuracy of model responses.',
+    body: 'Requify is provided "as is" with no warranty of any kind, including accuracy of model responses.',
   },
   {
     title: "CHANGES",

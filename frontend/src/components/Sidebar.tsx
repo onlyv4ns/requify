@@ -11,7 +11,6 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { useModel } from "@/lib/useModel";
 
 const NAV = [
   { label: "Generate", href: "/generate", icon: Sparkles },
@@ -25,7 +24,6 @@ const FOOTER_NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [model] = useModel();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -110,29 +108,6 @@ export default function Sidebar() {
           );
         })}
       </nav>
-
-      <div className="mt-4 rounded border border-border p-3 text-xs">
-        <div className="flex items-center gap-2 text-accent">
-          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-          ONLINE
-        </div>
-        <div className="mt-2 flex justify-between text-foreground/70">
-          <span>Model</span>
-          <span className="text-foreground">{model}</span>
-        </div>
-        <div className="mt-1 flex justify-between text-foreground/70">
-          <span>Context</span>
-          <span className="text-foreground">128K</span>
-        </div>
-        <div className="mt-2 flex gap-0.5">
-          {Array.from({ length: 20 }).map((_, i) => (
-            <span
-              key={i}
-              className={`h-3 w-1 ${i < 12 ? "bg-accent" : "bg-accent-dim"}`}
-            />
-          ))}
-        </div>
-      </div>
       </aside>
     </>
   );
