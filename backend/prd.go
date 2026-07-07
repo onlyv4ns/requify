@@ -1,0 +1,376 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"os/exec"
+	"strings"
+	"time"
+
+	"github.com/anthropics/anthropic-sdk-go"
+)
+
+const prdSystemPrompt = `You are a product manager writing a Product Requirements Document (PRD) in Markdown, in Bahasa Indonesia.
+
+Given a short description of an application, write a complete PRD with exactly these sections, in this order:
+
+## 1. Overview
+## 2. Requirements
+## 3. Core Features
+## 4. User Flow
+## 5. Architecture
+(include a mermaid sequenceDiagram showing the main data flow)
+## 6. Database Schema
+(include a mermaid erDiagram plus a markdown table describing each entity)
+## 7. Design & Technical Constraints
+
+If the user specifies a required tech stack (frontend, backend, database, and/or deployment), use it as-is in section 7 and make sure the Architecture diagram (section 5) and Database Schema (section 6) are consistent with it. Otherwise choose the stack yourself. Either way, always use the latest stable version of each technology (e.g. the newest major release of the framework/language/runtime as of your knowledge) and name that version explicitly in section 7 — never default to an older or unspecified version.
+
+Output only the Markdown document, starting with "# PRD — Project Requirements Document". Do not wrap it in a code fence. Do not add any commentary before or after.`
+
+const prdEditSystemPrompt = `You are a product manager editing an existing Product Requirements Document (PRD) written in Markdown, in Bahasa Indonesia.
+
+You will be given the current PRD content and an instruction describing the change to make. Apply the instruction and output the full, updated PRD in the same format (same section structure, mermaid diagrams where present). When the tech stack is touched, always use the latest stable version of each technology and name it explicitly. Output only the Markdown document. Do not wrap it in a code fence. Do not add any commentary before or after.`
+
+const prdAskSystemPrompt = `You are a product manager answering questions about an existing Product Requirements Document (PRD), in Bahasa Indonesia.
+
+You will be given the current PRD content and a question about it. Answer the question directly, referring to the relevant sections of the PRD. Do not rewrite or output the PRD itself — only the answer, in plain Markdown text.`
+
+type editPRDRequest struct {
+	Instruction string `json:"instruction"`
+	Provider    string `json:"provider"` // "api" (default) or "claude_code"
+}
+
+type askPRDRequest struct {
+	Question string `json:"question"`
+	Provider string `json:"provider"` // "api" (default) or "claude_code"
+}
+
+type generatePRDRequest struct {
+	Title      string `json:"title"`
+	Prompt     string `json:"prompt"`
+	Provider   string `json:"provider"` // "api" (default) or "claude_code"
+	Frontend   string `json:"frontend"`
+	Backend    string `json:"backend"`
+	Database   string `json:"database"`
+	Deployment string `json:"deployment"`
+}
+
+type prd struct {
+	ID              int64     `json:"id"`
+	UserID          int64     `json:"user_id"`
+	Title           string    `json:"title"`
+	Prompt          string    `json:"prompt"`
+	Frontend        string    `json:"frontend"`
+	Backend         string    `json:"backend"`
+	Database        string    `json:"database"`
+	Deployment      string    `json:"deployment"`
+	Content         string    `json:"content"`
+	PreviousContent *string   `json:"previous_content"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// buildModelPrompt appends the user's chosen tech stack (if any) to their
+// description so the model reflects it in the generated PRD, without
+// mutating the original prompt text stored alongside the PRD.
+func buildModelPrompt(prompt, frontend, backend, database, deployment string) string {
+	if frontend == "" && backend == "" && database == "" && deployment == "" {
+		return prompt
+	}
+	var sb strings.Builder
+	sb.WriteString(prompt)
+	sb.WriteString("\n\nRequired tech stack:\n")
+	if frontend != "" {
+		fmt.Fprintf(&sb, "- Frontend: %s\n", frontend)
+	}
+	if backend != "" {
+		fmt.Fprintf(&sb, "- Backend: %s\n", backend)
+	}
+	if database != "" {
+		fmt.Fprintf(&sb, "- Database: %s\n", database)
+	}
+	if deployment != "" {
+		fmt.Fprintf(&sb, "- Deployment: %s\n", deployment)
+	}
+	return sb.String()
+}
+
+func generatePRDHandler(ai anthropic.Client) func(w http.ResponseWriter, r *http.Request, userID int64) {
+	return func(w http.ResponseWriter, r *http.Request, userID int64) {
+		var req generatePRDRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Title == "" || req.Prompt == "" {
+			http.Error(w, "title and prompt are required", http.StatusBadRequest)
+			return
+		}
+
+		modelPrompt := buildModelPrompt(req.Prompt, req.Frontend, req.Backend, req.Database, req.Deployment)
+
+		var content string
+		var err error
+		if req.Provider == "claude_code" {
+			content, err = generateWithClaudeCode(r.Context(), prdSystemPrompt, modelPrompt)
+		} else {
+			content, err = generateWithAPI(r.Context(), ai, prdSystemPrompt, modelPrompt)
+		}
+		if err != nil {
+			log.Println("generate error:", err)
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+
+		var p prd
+		err = db.QueryRowContext(r.Context(),
+			`INSERT INTO prds (user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			 RETURNING id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, previous_content, created_at, updated_at`,
+			userID, req.Title, req.Prompt, req.Frontend, req.Backend, req.Database, req.Deployment, content,
+		).Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.PreviousContent, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			log.Println("db insert error:", err)
+			http.Error(w, "failed to save PRD", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(p)
+	}
+}
+
+func generateWithAPI(ctx context.Context, ai anthropic.Client, systemPrompt, prompt string) (string, error) {
+	model := anthropic.Model(envFile("ANTHROPIC_MODEL"))
+	if model == "" {
+		model = anthropic.ModelClaudeOpus4_8
+	}
+	resp, err := ai.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     model,
+		MaxTokens: 8000,
+		System: []anthropic.TextBlockParam{
+			{Text: systemPrompt},
+		},
+		Messages: []anthropic.MessageParam{
+			anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("anthropic api: %w", err)
+	}
+
+	for _, block := range resp.Content {
+		if b, ok := block.AsAny().(anthropic.TextBlock); ok {
+			return b.Text, nil
+		}
+	}
+	return "", fmt.Errorf("empty response from model")
+}
+
+// generateWithClaudeCode shells out to the `claude` CLI in print mode, using
+// whatever Claude Code auth (subscription login or API key) is configured on
+// the server this backend runs on — no separate ANTHROPIC_API_KEY needed.
+func generateWithClaudeCode(ctx context.Context, systemPrompt, prompt string) (string, error) {
+	if _, err := exec.LookPath("claude"); err != nil {
+		return "", fmt.Errorf("claude code CLI not found on this server")
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	args := []string{"-p", "--output-format", "text", "--system-prompt", systemPrompt}
+	if model := envFile("CLAUDE_CODE_MODEL"); model != "" {
+		args = append(args, "--model", model)
+	}
+	cmd := exec.CommandContext(ctx, "claude", append(args, prompt)...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("claude code: %v: %s", err, strings.TrimSpace(stderr.String()))
+	}
+
+	content := strings.TrimSpace(stdout.String())
+	if content == "" {
+		return "", fmt.Errorf("empty response from claude code")
+	}
+	return content, nil
+}
+
+func listPRDsHandler(w http.ResponseWriter, r *http.Request, userID int64) {
+	rows, err := db.QueryContext(r.Context(),
+		`SELECT id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, previous_content, created_at, updated_at
+		 FROM prds WHERE user_id = $1 ORDER BY created_at DESC`,
+		userID)
+	if err != nil {
+		http.Error(w, "failed to list PRDs", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	list := []prd{}
+	for rows.Next() {
+		var p prd
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.PreviousContent, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			http.Error(w, "failed to read PRDs", http.StatusInternalServerError)
+			return
+		}
+		list = append(list, p)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(list)
+}
+
+func getPRDHandler(w http.ResponseWriter, r *http.Request, userID int64) {
+	id := r.PathValue("id")
+	var p prd
+	err := db.QueryRowContext(r.Context(),
+		`SELECT id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, previous_content, created_at, updated_at
+		 FROM prds WHERE id = $1 AND user_id = $2`, id, userID,
+	).Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.PreviousContent, &p.CreatedAt, &p.UpdatedAt)
+	if err == sql.ErrNoRows {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, "failed to get PRD", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(p)
+}
+
+func deletePRDHandler(w http.ResponseWriter, r *http.Request, userID int64) {
+	id := r.PathValue("id")
+	res, err := db.ExecContext(r.Context(),
+		`DELETE FROM prds WHERE id = $1 AND user_id = $2`, id, userID)
+	if err != nil {
+		http.Error(w, "failed to delete PRD", http.StatusInternalServerError)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func editPRDHandler(ai anthropic.Client) func(w http.ResponseWriter, r *http.Request, userID int64) {
+	return func(w http.ResponseWriter, r *http.Request, userID int64) {
+		var req editPRDRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Instruction == "" {
+			http.Error(w, "instruction is required", http.StatusBadRequest)
+			return
+		}
+
+		id := r.PathValue("id")
+		var currentContent string
+		err := db.QueryRowContext(r.Context(),
+			`SELECT content FROM prds WHERE id = $1 AND user_id = $2`, id, userID,
+		).Scan(&currentContent)
+		if err == sql.ErrNoRows {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		} else if err != nil {
+			http.Error(w, "failed to load PRD", http.StatusInternalServerError)
+			return
+		}
+
+		editPrompt := fmt.Sprintf("Current PRD:\n\n%s\n\nInstruction: %s", currentContent, req.Instruction)
+
+		var newContent string
+		if req.Provider == "claude_code" {
+			newContent, err = generateWithClaudeCode(r.Context(), prdEditSystemPrompt, editPrompt)
+		} else {
+			newContent, err = generateWithAPI(r.Context(), ai, prdEditSystemPrompt, editPrompt)
+		}
+		if err != nil {
+			log.Println("edit error:", err)
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+
+		var p prd
+		err = db.QueryRowContext(r.Context(),
+			`UPDATE prds SET previous_content = content, content = $1, updated_at = now() WHERE id = $2 AND user_id = $3
+			 RETURNING id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, previous_content, created_at, updated_at`,
+			newContent, id, userID,
+		).Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.PreviousContent, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			log.Println("db update error:", err)
+			http.Error(w, "failed to save PRD", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(p)
+	}
+}
+
+// undoPRDHandler restores content from previous_content (one level of undo,
+// set by editPRDHandler before it overwrites content).
+func undoPRDHandler(w http.ResponseWriter, r *http.Request, userID int64) {
+	id := r.PathValue("id")
+	var p prd
+	err := db.QueryRowContext(r.Context(),
+		`UPDATE prds SET content = previous_content, previous_content = NULL, updated_at = now()
+		 WHERE id = $1 AND user_id = $2 AND previous_content IS NOT NULL
+		 RETURNING id, user_id, title, prompt, frontend_stack, backend_stack, database_stack, deployment_stack, content, previous_content, created_at, updated_at`,
+		id, userID,
+	).Scan(&p.ID, &p.UserID, &p.Title, &p.Prompt, &p.Frontend, &p.Backend, &p.Database, &p.Deployment, &p.Content, &p.PreviousContent, &p.CreatedAt, &p.UpdatedAt)
+	if err == sql.ErrNoRows {
+		http.Error(w, "nothing to undo", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, "failed to undo", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(p)
+}
+
+// askPRDHandler answers a question about the PRD without modifying it —
+// unlike editPRDHandler, nothing is written back to the database.
+func askPRDHandler(ai anthropic.Client) func(w http.ResponseWriter, r *http.Request, userID int64) {
+	return func(w http.ResponseWriter, r *http.Request, userID int64) {
+		var req askPRDRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Question == "" {
+			http.Error(w, "question is required", http.StatusBadRequest)
+			return
+		}
+
+		id := r.PathValue("id")
+		var content string
+		err := db.QueryRowContext(r.Context(),
+			`SELECT content FROM prds WHERE id = $1 AND user_id = $2`, id, userID,
+		).Scan(&content)
+		if err == sql.ErrNoRows {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		} else if err != nil {
+			http.Error(w, "failed to load PRD", http.StatusInternalServerError)
+			return
+		}
+
+		askPrompt := fmt.Sprintf("Current PRD:\n\n%s\n\nQuestion: %s", content, req.Question)
+
+		var answer string
+		if req.Provider == "claude_code" {
+			answer, err = generateWithClaudeCode(r.Context(), prdAskSystemPrompt, askPrompt)
+		} else {
+			answer, err = generateWithAPI(r.Context(), ai, prdAskSystemPrompt, askPrompt)
+		}
+		if err != nil {
+			log.Println("ask error:", err)
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"answer": answer})
+	}
+}
