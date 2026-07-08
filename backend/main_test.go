@@ -44,6 +44,23 @@ func TestLoadEnvFileMissing(t *testing.T) {
 	loadEnvFile(filepath.Join(t.TempDir(), "does-not-exist.env"))
 }
 
+func TestGenerateShareTokenIsRandomHex(t *testing.T) {
+	a, err := generateShareToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := generateShareToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == b {
+		t.Fatal("expected two calls to produce different tokens")
+	}
+	if len(a) != 32 {
+		t.Errorf("len(token) = %d, want 32 (16 bytes hex-encoded)", len(a))
+	}
+}
+
 func TestEnvFilePicksUpChangesWithoutRestart(t *testing.T) {
 	t.Chdir(t.TempDir())
 	envPath := ".env"

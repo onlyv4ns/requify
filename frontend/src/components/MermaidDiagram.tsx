@@ -15,12 +15,6 @@ export default function MermaidDiagram({ chart }: { chart: string }) {
       mermaid.initialize({ startOnLoad: false, theme: "dark", securityLevel: "strict" });
       try {
         const { svg } = await mermaid.render(`mermaid-${id}`, chart);
-        // DOMPurify (strict mode) serializes HTML-label void elements as bare
-        // <br>, which is valid HTML5 but invalid XML — and the <img
-        // src="data:image/svg+xml"> below is parsed as strict XML, so a bare
-        // <br> fails to decode and the whole diagram renders blank.
-        // ponytail: <br> is the only void element mermaid emits in labels;
-        // widen the alternation if <hr>/<img>/etc. ever show up.
         if (!cancelled) setSvg(svg.replace(/<br\s*>/g, "<br/>"));
       } catch {
         if (!cancelled) setError(true);
@@ -47,8 +41,6 @@ export default function MermaidDiagram({ chart }: { chart: string }) {
     );
   }
 
-  // Rendering as an <img src="data:..."> (instead of inline SVG) is what lets
-  // the browser offer its native "open image in new tab" on right-click.
   const dataUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
 
   return (

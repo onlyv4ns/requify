@@ -43,9 +43,6 @@ function Markdown({ children }: { children: string }) {
             <th className="border border-border px-2 py-1.5 text-left font-medium" {...props} />
           ),
           td: (props) => <td className="border border-border px-2 py-1.5 align-top" {...props} />,
-          // Fenced code blocks are always wrapped in <pre> regardless of whether a
-          // language is given — that wrapper, not the `language-xxx` class, is the
-          // reliable signal for "this is a block, not inline code".
           pre: ({ children }) => {
             const codeEl = children as React.ReactElement<{
               className?: string;

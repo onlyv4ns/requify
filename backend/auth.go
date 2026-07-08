@@ -35,8 +35,6 @@ func init() {
 const sessionCookieName = "requify_session"
 const sessionTTL = 7 * 24 * time.Hour
 
-// signSession builds an opaque "payload.signature" token (HMAC-SHA256) —
-// enough for a single-service session without pulling in a JWT dependency.
 func signSession(userID int64) string {
 	payload := fmt.Sprintf("%d.%d", userID, time.Now().Add(sessionTTL).Unix())
 	mac := hmac.New(sha256.New, authSecret)
@@ -109,8 +107,6 @@ func currentUserID(r *http.Request) (int64, bool) {
 	return verifySession(c.Value)
 }
 
-// requireAuth wraps a handler that needs the caller's user id, rejecting the
-// request with 401 if there's no valid session cookie.
 func requireAuth(next func(w http.ResponseWriter, r *http.Request, userID int64)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := currentUserID(r)

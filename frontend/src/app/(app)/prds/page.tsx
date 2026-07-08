@@ -9,9 +9,11 @@ import { useAppDialog } from "@/components/AppDialog";
 
 export default function PrdsPage() {
   const [prds, setPrds] = useState<Prd[]>([]);
+  const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const { dialog, confirm } = useAppDialog();
+  const filtered = prds.filter((p) => p.title.toLowerCase().includes(query.trim().toLowerCase()));
 
   useEffect(() => {
     listPrds()
@@ -45,12 +47,19 @@ export default function PrdsPage() {
         subtitle="All Product Requirements Documents you've created."
       />
 
-      <SectionLabel>{prds.length} PRD</SectionLabel>
+      <SectionLabel>{filtered.length} PRD</SectionLabel>
+
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search PRDs..."
+        className="mt-4 w-full rounded border border-border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-foreground/40 focus:border-accent/60"
+      />
 
       {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {prds.map(({ id, title, created_at }) => (
+        {filtered.map(({ id, title, created_at }) => (
           <Link
             key={id}
             href={`/prds/${id}`}

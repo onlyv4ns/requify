@@ -21,6 +21,24 @@ import Markdown from "@/components/Markdown";
 
 type StackKey = "frontend" | "backend" | "database" | "deployment";
 
+const EXAMPLES: { title: string; prompt: string }[] = [
+  {
+    title: "Warehouse Inventory Management",
+    prompt:
+      "An app to track stock in a warehouse, including incoming and outgoing items, with low-stock notifications.",
+  },
+  {
+    title: "Employee Leave Tracker",
+    prompt:
+      "An app for employees to request leave and managers to approve or reject it, with a remaining-leave-balance report.",
+  },
+  {
+    title: "Recipe Sharing App",
+    prompt:
+      "An app for sharing recipes where users can upload recipes, rate them, and save favorites.",
+  },
+];
+
 const STACK_FIELDS: {
   key: StackKey;
   label: string;
@@ -113,6 +131,25 @@ export default function GeneratePage() {
         title="Generate PRD"
         subtitle="Describe your app idea and get a full PRD automatically."
       />
+
+      <div className="mb-4">
+        <SectionLabel>Or try an example</SectionLabel>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {EXAMPLES.map((ex) => (
+            <button
+              key={ex.title}
+              type="button"
+              onClick={() => {
+                setTitle(ex.title);
+                setPrompt(ex.prompt);
+              }}
+              className="rounded border border-border px-2.5 py-1 text-xs text-foreground/70 hover:bg-accent-dim/20"
+            >
+              {ex.title}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>

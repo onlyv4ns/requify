@@ -10,13 +10,12 @@ export type Prd = {
   database: string;
   deployment: string;
   content: string;
+  share_token: string | null;
   can_undo: boolean;
   created_at: string;
   updated_at: string;
 };
 
-// Calls the backend directly (not through Next's rewrite proxy) — the proxy
-// has a ~30s timeout that provider=claude_code can exceed.
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -110,4 +109,35 @@ export function register(name: string, email: string, password: string) {
 
 export function logout() {
   return fetch(`${API_URL}/api/auth/logout`, { method: "POST", credentials: "include" });
+}
+
+export type Revision = { id: number; created_at: string };
+export type RevisionDetail = { id: number; content: string; created_at: string };
+
+export function listRevisions(id: string) {
+  return request<Revision[]>(`/api/prds/${id}/revisions`);
+}
+
+export function getRevision(id: string, revisionId: number) {
+  return request<RevisionDetail>(`/api/prds/${id}/revisions/${revisionId}`);
+}
+
+export function restoreRevision(id: string, revisionId: number) {
+  return request<Prd>(`/api/prds/${id}/revisions/${revisionId}/restore`, { method: "POST" });
+}
+
+export function duplicatePrd(id: string) {
+  return request<Prd>(`/api/prds/${id}/duplicate`, { method: "POST" });
+}
+
+export function sharePrd(id: string) {
+  return request<{ share_token: string }>(`/api/prds/${id}/share`, { method: "POST" });
+}
+
+export function unsharePrd(id: string) {
+  return request<void>(`/api/prds/${id}/share`, { method: "DELETE" });
+}
+
+export function getSharedPrd(token: string) {
+  return request<Prd>(`/api/public/prds/${token}`);
 }

@@ -15,9 +15,6 @@ import (
 
 var db *sql.DB
 
-// parseEnvFile reads KEY=VALUE pairs from the given .env file, if it exists.
-// Kept dependency-free since this is the only thing we need from a full .env
-// library.
 func parseEnvFile(path string) map[string]string {
 	vars := map[string]string{}
 	f, err := os.Open(path)
@@ -41,8 +38,6 @@ func parseEnvFile(path string) map[string]string {
 	return vars
 }
 
-// loadEnvFile sets process env vars from the given .env file, without
-// overriding variables already set in the real environment.
 func loadEnvFile(path string) {
 	for key, value := range parseEnvFile(path) {
 		if _, exists := os.LookupEnv(key); exists {
@@ -52,11 +47,6 @@ func loadEnvFile(path string) {
 	}
 }
 
-// envFile re-reads key straight from .env on every call, so editing the file
-// takes effect on the next request with no server restart. Falls back to the
-// process environment if the file doesn't define it.
-// ponytail: re-reads and re-parses the whole file per call — fine at this
-// request rate, switch to fsnotify + cache if PRD generation becomes hot.
 func envFile(key string) string {
 	if v, ok := parseEnvFile(".env")[key]; ok {
 		return v
@@ -97,6 +87,13 @@ func main() {
 	mux.HandleFunc("POST /api/prds/{id}/undo", requireAuth(undoPRDHandler))
 	mux.HandleFunc("POST /api/prds/{id}/ask", requireAuth(askPRDHandler(ai)))
 	mux.HandleFunc("DELETE /api/prds/{id}", requireAuth(deletePRDHandler))
+	mux.HandleFunc("GET /api/prds/{id}/revisions", requireAuth(listRevisionsHandler))
+	mux.HandleFunc("GET /api/prds/{id}/revisions/{revisionId}", requireAuth(getRevisionHandler))
+	mux.HandleFunc("POST /api/prds/{id}/revisions/{revisionId}/restore", requireAuth(restoreRevisionHandler))
+	mux.HandleFunc("POST /api/prds/{id}/duplicate", requireAuth(duplicatePRDHandler))
+	mux.HandleFunc("POST /api/prds/{id}/share", requireAuth(sharePRDHandler))
+	mux.HandleFunc("DELETE /api/prds/{id}/share", requireAuth(unsharePRDHandler))
+	mux.HandleFunc("GET /api/public/prds/{token}", getPublicPRDHandler)
 
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	if frontendOrigin == "" {
@@ -109,10 +106,6 @@ func main() {
 	}
 }
 
-// withCORS lets the frontend call this API directly (cross-origin,
-// credentials included) instead of going through a dev-server proxy —
-// needed because claude_code generation can run well past typical proxy
-// timeouts.
 func withCORS(origin string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
