@@ -8,7 +8,9 @@ AI-powered Product Requirements Document (PRD) generator — describe a product 
 
 - **Generate** — turn a short prompt and an optional tech stack (frontend, backend, database, deployment) into a complete PRD
 - **Edit with AI** — give a natural-language instruction and the AI rewrites the PRD in place
-- **Undo** — revert the last AI edit back to the previous version
+- **Revision history** — every AI edit is saved; browse past revisions and restore any of them
+- **Duplicate** — clone an existing PRD as a new starting point
+- **Share** — publish a PRD as a read-only public link, revoke it anytime
 - **Ask** — ask questions about an existing PRD without modifying it
 - **Export** — download any PRD as Markdown or PDF
 - **Two AI providers** — Anthropic API (`ANTHROPIC_API_KEY`) or the `claude` CLI already logged in on the host (`claude_code`), selectable per request
@@ -59,8 +61,8 @@ cd frontend && npm install && npm run dev   # :3000
 ## Project structure
 
 ```
-backend/    Go API server (auth, PRD generation/edit/undo/ask)
-frontend/   Next.js app (generate, view/edit PRDs, auth)
+backend/    Go API server (auth, PRD generation/edit/revisions/duplicate/share/ask)
+frontend/   Next.js app (generate, view/edit PRDs, revision history, public share view, auth)
 db/         Postgres schema (init.sql)
 run.sh      Starts db + backend + frontend together
 ```
